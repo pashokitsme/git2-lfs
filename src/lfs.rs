@@ -75,6 +75,12 @@ impl<'a> Lfs<'a> {
 
   fn load_object(self, pointer: &Pointer, out: &mut impl Write) -> Result<(), Error> {
     let path = self.object_dir().join(pointer.path());
+
+    if !path.exists() {
+      warn!(path = %path.display(), "object not found, skipping");
+      return Ok(());
+    }
+
     let file = std::fs::File::open(&path)?;
     let mut reader = BufReader::new(file);
     std::io::copy(&mut reader, out)?;
