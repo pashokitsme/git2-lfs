@@ -45,7 +45,7 @@ impl Pointer {
 
   pub fn path(&self) -> PathBuf {
     let hex = self.hex();
-    Path::new(&hex[..=2]).join(&hex[2..=4]).join(&hex[5..])
+    Path::new(&hex[..2]).join(&hex[2..4]).join(&hex[4..])
   }
 
   pub fn write_pointer(&self, writer: &mut impl Write) -> Result<(), Error> {
