@@ -5,7 +5,9 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.100"
-git2 = { git = "https://github.com/pashokitsme/git2-rs", branch = "filter" }
+git2 = { path = "/Users/pavel.smirnov/Source/work/git2-rs", default-features = false, features = [
+  "vendored-libgit2",
+] }
 
 [dev-dependencies]
 tempfile = "3.23.0"

@@ -1,1 +1,1 @@
-mod lfs;
+pub mod lfs;
