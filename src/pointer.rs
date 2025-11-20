@@ -1,29 +1,18 @@
+use std::io::BufWriter;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 
 use sha2::Digest;
 
+use crate::Error;
+
 const HASH_LEN: usize = 32;
 const HEX_LEN: usize = HASH_LEN * 2;
 
-#[derive(thiserror::Error, Debug)]
-pub enum Error {
-  #[error("resulting hash should be exactly 32 bytes, got {0}")]
-  InvalidHashLength(usize),
-
-  #[error("the pointer containts invalid spec, expected '{expected}', got '{actual}'")]
-  InvalidSpec { expected: String, actual: String },
-
-  #[error("the pointer containts invalid size: '{0}'")]
-  InvalidSize(String),
-
-  #[error("hex: {0}")]
-  Hex(#[from] hex::FromHexError),
-
-  #[error("io: {0}")]
-  Io(#[from] std::io::Error),
-}
+const VERSION: &str = "version https://git-lfs.github.com/spec/v1";
+const OID_PREFIX: &str = "oid sha256:";
+const SIZE_PREFIX: &str = "size ";
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Pointer {
@@ -32,7 +21,7 @@ pub struct Pointer {
 }
 
 impl Pointer {
-  pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
+  pub fn from_blob_bytes(bytes: &[u8]) -> Result<Self, Error> {
     let mut hasher = sha2::Sha256::default();
     hasher.update(bytes);
     let val = hasher.finalize();
@@ -56,10 +45,10 @@ impl Pointer {
 
   pub fn path(&self) -> PathBuf {
     let hex = self.hex();
-    Path::new("lfs").join("objects").join(&hex[..=2]).join(&hex[2..=4]).join(&hex[5..])
+    Path::new(&hex[..=2]).join(&hex[2..=4]).join(&hex[5..])
   }
 
-  pub fn write(&self, writer: &mut impl Write) -> Result<(), Error> {
+  pub fn write_pointer(&self, writer: &mut impl Write) -> Result<(), Error> {
     writer.write_all(b"version https://git-lfs.github.com/spec/v1\n")?;
     writer.write_all(b"oid sha256:")?;
 
@@ -76,15 +65,28 @@ impl Pointer {
 
     Ok(())
   }
+
+  pub fn write_blob_bytes(&self, absolute_object_dir: &Path, bytes: &[u8]) -> Result<(), Error> {
+    let file = absolute_object_dir.join(self.path());
+    std::fs::create_dir_all(file.parent().unwrap())?;
+
+    let mut file = std::fs::File::options().create_new(true).write(true).open(&file)?;
+    BufWriter::new(&mut file).write_all(bytes)?;
+    Ok(())
+  }
+
+  pub fn is_pointer(bytes: &[u8]) -> bool {
+    match str::from_utf8(bytes) {
+      Ok(text) => text.starts_with(VERSION),
+      Err(_) => false,
+    }
+  }
 }
 
 impl std::str::FromStr for Pointer {
   type Err = Error;
 
   fn from_str(s: &str) -> Result<Self, Self::Err> {
-    const VERSION: &str = "version https://git-lfs.github.com/spec/v1";
-    const OID_PREFIX: &str = "oid sha256:";
-    const SIZE_PREFIX: &str = "size ";
     let mut lines = s.lines();
 
     let version = lines.next().unwrap_or_default();

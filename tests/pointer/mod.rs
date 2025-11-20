@@ -10,10 +10,10 @@ use sha2::Digest;
 
 #[rstest]
 fn write_and_parse() -> Result<(), anyhow::Error> {
-  let pointer = Pointer::from_bytes(b"blob")?;
+  let pointer = Pointer::from_blob_bytes(b"blob")?;
 
   let mut data = Vec::new();
-  pointer.write(&mut data)?;
+  pointer.write_pointer(&mut data)?;
 
   let hash = sha2::Sha256::digest(b"blob");
   let hex = hex::encode(hash);
