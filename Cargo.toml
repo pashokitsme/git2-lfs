@@ -1,19 +1,20 @@
 [package]
-name = "lfs"
-version = "0.1.0"
+name = "git2-lfs"
+version = "0.0.0"
 edition = "2024"
 
 [dependencies]
-anyhow = "1.0.100"
 git2 = { git = "https://github.com/pashokitsme/git2-rs", branch = "filter", default-features = false, features = [
   "vendored-libgit2",
 ] }
 hex = "0.4.3"
+reqwest = "0.12.24"
 sha2 = "0.10.9"
 thiserror = "2.0.17"
 tracing = "0.1.41"
 
 [dev-dependencies]
+anyhow = "1.0.100"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 assert_matches = "1.5.0"
 assertables = "9.8.2"

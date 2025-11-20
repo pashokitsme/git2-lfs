@@ -2,7 +2,7 @@ mod parse;
 
 use std::str::FromStr;
 
-use lfs::Pointer;
+use git2_lfs::Pointer;
 use rstest::rstest;
 
 use assertables::assert_ok;

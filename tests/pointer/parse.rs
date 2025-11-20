@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
-use lfs::Error;
-use lfs::Pointer;
+use git2_lfs::Error;
+use git2_lfs::Pointer;
 use rstest::rstest;
 
 use assert_matches::assert_matches;

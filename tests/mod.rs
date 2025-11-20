@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::Once;
 
-use ::lfs::LfsBuilder;
+use git2_lfs::LfsBuilder;
 use rstest::fixture;
 use tempfile::TempDir;
 

@@ -4,7 +4,7 @@ use assert_matches::assert_matches;
 use assertables::assert_ok;
 use git2::build::CheckoutBuilder;
 use git2::*;
-use lfs::Pointer;
+use git2_lfs::Pointer;
 use rstest::rstest;
 use tempfile::TempDir;
 
