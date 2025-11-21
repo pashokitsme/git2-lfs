@@ -11,6 +11,8 @@ use tempfile::TempDir;
 use crate::repo;
 use crate::sandbox;
 
+mod blob;
+
 #[rstest]
 fn lfs_clean_add_naive(
   _sandbox: TempDir,
@@ -50,13 +52,12 @@ fn lfs_clean_add_naive(
 
   assert_eq!(assert_ok!(std::str::from_utf8(text_content)), text);
 
-  let mut pointer_bytes = Vec::new();
-  bin_expected_pointer.write_pointer(&mut pointer_bytes)?;
+  let pointer_bytes = bin_expected_pointer.as_bytes()?;
 
   assert_eq!(assert_ok!(std::str::from_utf8(bin_content)), assert_ok!(std::str::from_utf8(&pointer_bytes)));
 
   let hex = bin_expected_pointer.hex();
-  let object_path = repo.path().join("lfs/objects/").join(&hex[..=2]).join(&hex[2..=4]).join(&hex[5..]);
+  let object_path = repo.path().join("lfs/objects/").join(&hex[..2]).join(&hex[2..4]).join(&hex);
 
   assert!(object_path.exists());
 

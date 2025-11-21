@@ -1,0 +1,117 @@
+use std::borrow::Cow;
+use std::path::Path;
+
+use assert_matches::assert_matches;
+use git2::ErrorCode;
+use git2_lfs::Pointer;
+use git2_lfs::ext::{BlobLfsExt, RepoLfsExt};
+use rstest::rstest;
+use tempfile::TempDir;
+
+use crate::repo;
+use crate::sandbox;
+
+#[rstest]
+fn repo_get_lfs_blob_content_returns_owned_bytes_for_pointer(
+  _sandbox: TempDir,
+  #[with(&_sandbox)] repo: git2::Repository,
+) -> Result<(), anyhow::Error> {
+  let path = Path::new("blob.bin");
+  let blob_bytes = b"blob content";
+
+  let blob = write_blob(&repo, path, blob_bytes)?;
+  assert!(blob.is_lfs_pointer());
+
+  let resolved = repo.get_lfs_blob_content(&blob)?;
+
+  assert_matches!(resolved, Cow::Owned(_));
+  assert_eq!(resolved.as_ref(), blob_bytes);
+
+  Ok(())
+}
+
+#[rstest]
+fn repo_get_lfs_blob_content_returns_borrowed_bytes_for_regular_blob(
+  _sandbox: TempDir,
+  #[with(&_sandbox)] repo: git2::Repository,
+) -> Result<(), anyhow::Error> {
+  let path = Path::new("text.txt");
+  let blob_bytes = b"hello world";
+
+  let blob = write_blob(&repo, path, blob_bytes)?;
+  assert!(!blob.is_lfs_pointer());
+
+  let resolved = repo.get_lfs_blob_content(&blob)?;
+
+  assert_matches!(resolved, Cow::Borrowed(_));
+  assert_eq!(resolved.as_ref(), blob_bytes);
+
+  Ok(())
+}
+
+#[rstest]
+fn repo_get_lfs_blob_content_errors_when_missing_object(
+  _sandbox: TempDir,
+  #[with(&_sandbox)] repo: git2::Repository,
+) -> Result<(), anyhow::Error> {
+  let path = Path::new("blob.bin");
+  let blob_bytes = b"blob content";
+
+  let blob = write_blob(&repo, path, blob_bytes)?;
+  let pointer = Pointer::from_blob_bytes(blob_bytes)?;
+  let object_path = repo.path().join("lfs/objects").join(pointer.path());
+
+  assert!(object_path.exists());
+  std::fs::remove_file(&object_path)?;
+  assert!(!object_path.exists());
+
+  let err = repo.get_lfs_blob_content(&blob).expect_err("expected missing object error");
+
+  assert_matches!(err, git2_lfs::Error::Git2(err) if err.code() == ErrorCode::NotFound);
+
+  Ok(())
+}
+
+#[rstest]
+fn blob_is_lfs_pointer_reports_pointer_state(
+  _sandbox: TempDir,
+  #[with(&_sandbox)] repo: git2::Repository,
+) -> Result<(), anyhow::Error> {
+  let pointer_path = Path::new("blob.bin");
+  let pointer_bytes = b"blob";
+  let text_path = Path::new("text.txt");
+  let text_bytes = b"hello";
+
+  let pointer_blob = write_blob(&repo, pointer_path, pointer_bytes)?;
+  let text_blob = write_blob(&repo, text_path, text_bytes)?;
+
+  assert!(pointer_blob.is_lfs_pointer());
+  assert!(!text_blob.is_lfs_pointer());
+
+  Ok(())
+}
+
+fn write_blob<'repo>(
+  repo: &'repo git2::Repository,
+  path: &Path,
+  data: &[u8],
+) -> Result<git2::Blob<'repo>, anyhow::Error> {
+  let workdir = repo.workdir().expect("expected non-bare repository");
+  let file_path = workdir.join(path);
+  if let Some(parent) = file_path.parent() {
+    std::fs::create_dir_all(parent)?;
+  }
+
+  std::fs::write(&file_path, data)?;
+
+  let mut index = repo.index()?;
+  index.add_all(["*"], git2::IndexAddOption::default(), None)?;
+  index.write()?;
+
+  let tree_id = index.write_tree()?;
+  let tree = repo.find_tree(tree_id)?;
+  let oid = tree.get_path(path)?.id();
+  let blob = repo.find_blob(oid)?;
+
+  Ok(blob)
+}

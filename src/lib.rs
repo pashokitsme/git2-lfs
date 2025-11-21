@@ -1,3 +1,4 @@
+pub mod ext;
 mod lfs;
 mod pointer;
 

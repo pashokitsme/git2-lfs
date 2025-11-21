@@ -1,9 +1,9 @@
 use std::collections::HashSet;
 use std::io::BufReader;
+use std::io::Cursor;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::sync::Arc;
 
 use git2::Filter;
@@ -16,9 +16,8 @@ use tracing::*;
 
 use crate::Pointer;
 
-#[derive(Clone, Debug)]
+#[derive(Default, Clone, Debug)]
 pub struct LfsBuilder {
-  relative_objects_dir: PathBuf,
   exts: Option<HashSet<String>>,
   max_file_size: Option<u64>,
 }
@@ -57,7 +56,11 @@ impl<'a> Lfs<'a> {
   }
 
   pub fn smudge(self, input: &[u8], out: &mut impl Write) -> Result<(), Error> {
-    let pointer = Pointer::from_str(std::str::from_utf8(input)?)?;
+    let Some(pointer) = Pointer::from_str_short(input) else {
+      std::io::copy(&mut Cursor::new(input), out)?;
+      return Ok(());
+    };
+
     self.load_object(&pointer, out)?;
     Ok(())
   }
@@ -88,26 +91,11 @@ impl<'a> Lfs<'a> {
   }
 
   fn object_dir(&self) -> PathBuf {
-    self.repo.path().join(&self.config.relative_objects_dir)
-  }
-}
-
-impl Default for LfsBuilder {
-  fn default() -> Self {
-    Self {
-      relative_objects_dir: Path::new("lfs").join("objects"),
-      exts: Default::default(),
-      max_file_size: Default::default(),
-    }
+    self.repo.path().join("lfs/objects")
   }
 }
 
 impl LfsBuilder {
-  pub fn with_objects_dir(mut self, objects_dir: PathBuf) -> Self {
-    self.relative_objects_dir = objects_dir;
-    self
-  }
-
   pub fn with_file_extensions(mut self, exts: &[&str]) -> Self {
     self.exts = Some(exts.iter().map(|ext| ext.to_string()).collect());
     self
@@ -149,12 +137,6 @@ impl LfsBuilder {
             Ok(())
           }
           FilterMode::Smudge => {
-            if !Pointer::is_pointer(from.as_bytes()) {
-              let buf = to.as_allocated_vec();
-              buf.extend_from_slice(from.as_bytes());
-              return Ok(());
-            }
-
             lfs.smudge(from.as_bytes(), &mut to.as_allocated_vec()).expect("FIX ME");
             Ok(())
           }

@@ -40,3 +40,18 @@ size {size}
 
   Ok(())
 }
+
+#[rstest]
+fn is_pointer() -> Result<(), anyhow::Error> {
+  let not_pointer = b"not a pointer";
+  let pointer = Pointer::from_blob_bytes(b"blob")?;
+  let pointer_bytes = pointer.as_bytes()?;
+
+  assert!(!Pointer::is_pointer(not_pointer));
+  assert!(Pointer::is_pointer(&pointer_bytes));
+
+  let truncated_pointer_bytes = &pointer_bytes[..99];
+  assert!(!Pointer::is_pointer(truncated_pointer_bytes));
+
+  Ok(())
+}

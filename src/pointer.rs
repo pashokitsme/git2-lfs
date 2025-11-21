@@ -1,7 +1,9 @@
 use std::io::BufWriter;
+use std::io::Read;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use sha2::Digest;
 
@@ -66,6 +68,12 @@ impl Pointer {
     Ok(())
   }
 
+  pub fn as_bytes(&self) -> Result<Vec<u8>, Error> {
+    let mut bytes = Vec::with_capacity(120);
+    self.write_pointer(&mut bytes)?;
+    Ok(bytes)
+  }
+
   pub fn write_blob_bytes(&self, absolute_object_dir: &Path, bytes: &[u8]) -> Result<(), Error> {
     let file = absolute_object_dir.join(self.path());
     std::fs::create_dir_all(file.parent().unwrap())?;
@@ -75,15 +83,19 @@ impl Pointer {
     Ok(())
   }
 
-  pub fn is_pointer(bytes: &[u8]) -> bool {
-    match str::from_utf8(bytes) {
-      Ok(text) => text.starts_with(VERSION),
-      Err(_) => false,
+  pub fn from_str_short(bytes: &[u8]) -> Option<Self> {
+    match bytes.get(..118).map(str::from_utf8) {
+      Some(Ok(text)) => Pointer::from_str(text).ok(),
+      _ => None,
     }
+  }
+
+  pub fn is_pointer(bytes: &[u8]) -> bool {
+    Pointer::from_str_short(bytes).is_some()
   }
 }
 
-impl std::str::FromStr for Pointer {
+impl FromStr for Pointer {
   type Err = Error;
 
   fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -91,7 +103,6 @@ impl std::str::FromStr for Pointer {
 
     let version = lines.next().unwrap_or_default();
     let oid = lines.next().unwrap_or_default();
-    let size = lines.next().unwrap_or_default();
 
     if version != VERSION {
       let actual = if version.is_empty() || version == "\n" { "<empty line>" } else { version };
@@ -109,13 +120,20 @@ impl std::str::FromStr for Pointer {
 
     let hex = &oid[OID_PREFIX.len()..HEX_LEN + OID_PREFIX.len()];
 
-    if !size.starts_with(SIZE_PREFIX) {
-      let actual = if size.is_empty() || size == "\n" { "<empty line>" } else { size };
-      return Err(Error::InvalidSpec { expected: SIZE_PREFIX.to_string(), actual: actual.to_string() });
-    }
+    let size = lines.next();
 
-    let size = &size[SIZE_PREFIX.len()..];
-    let size = size.parse::<usize>().map_err(|err| Error::InvalidSize(err.to_string()))?;
+    let size = match size {
+      Some("" | "\n") | None => 0,
+      Some(size) => {
+        if !size.starts_with(SIZE_PREFIX) {
+          let actual = if size.is_empty() || size == "\n" { "<empty line>" } else { size };
+          return Err(Error::InvalidSpec { expected: SIZE_PREFIX.to_string(), actual: actual.to_string() });
+        }
+
+        let size = &size[SIZE_PREFIX.len()..];
+        size.parse::<usize>().map_err(|err| Error::InvalidSize(err.to_string()))?
+      }
+    };
 
     let mut hash = [0; HASH_LEN];
     hex::decode_to_slice(hex, &mut hash).map_err(Error::Hex)?;
