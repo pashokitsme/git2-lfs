@@ -1,5 +1,4 @@
 use std::io::BufWriter;
-use std::io::Read;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
@@ -8,6 +7,8 @@ use std::str::FromStr;
 use sha2::Digest;
 
 use crate::Error;
+
+use tracing::*;
 
 const HASH_LEN: usize = 32;
 const HEX_LEN: usize = HASH_LEN * 2;
@@ -78,6 +79,8 @@ impl Pointer {
     let file = absolute_object_dir.join(self.path());
     std::fs::create_dir_all(file.parent().unwrap())?;
 
+    info!(path = %file.display(), "writing lfs object");
+
     let mut file = std::fs::File::options().create_new(true).write(true).open(&file)?;
     BufWriter::new(&mut file).write_all(bytes)?;
     Ok(())
@@ -85,7 +88,13 @@ impl Pointer {
 
   pub fn from_str_short(bytes: &[u8]) -> Option<Self> {
     match bytes.get(..118).map(str::from_utf8) {
-      Some(Ok(text)) => Pointer::from_str(text).ok(),
+      Some(Ok(text)) => {
+        let pointer = Pointer::from_str(text);
+        if let Err(ref err) = pointer {
+          debug!("Pointer::from_str_short: {:?}", err);
+        }
+        pointer.ok()
+      }
       _ => None,
     }
   }
@@ -137,6 +146,8 @@ impl FromStr for Pointer {
 
     let mut hash = [0; HASH_LEN];
     hex::decode_to_slice(hex, &mut hash).map_err(Error::Hex)?;
+
+    debug!("Pointer::from_str: {:?} -> {:?}", s, Pointer { hash, size });
 
     Ok(Pointer { hash, size })
   }

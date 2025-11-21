@@ -57,6 +57,7 @@ impl<'a> Lfs<'a> {
 
   pub fn smudge(self, input: &[u8], out: &mut impl Write) -> Result<(), Error> {
     let Some(pointer) = Pointer::from_str_short(input) else {
+      debug!("not a lfs pointer, passing through");
       std::io::copy(&mut Cursor::new(input), out)?;
       return Ok(());
     };
@@ -69,6 +70,7 @@ impl<'a> Lfs<'a> {
     let path = self.object_dir().join(pointer.path());
 
     if path.exists() {
+      info!(path = %path.display(), "object already exists, skipping");
       return Ok(());
     }
 
@@ -83,6 +85,8 @@ impl<'a> Lfs<'a> {
       warn!(path = %path.display(), "object not found, skipping");
       return Ok(());
     }
+
+    debug!(path = %path.display(), "reading lfs object");
 
     let file = std::fs::File::open(&path)?;
     let mut reader = BufReader::new(file);

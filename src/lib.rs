@@ -1,4 +1,6 @@
 pub mod ext;
+pub mod remote;
+
 mod lfs;
 mod pointer;
 
