@@ -24,6 +24,13 @@ pub struct Pointer {
 }
 
 impl Pointer {
+  pub fn from_parts(hash: &[u8], size: usize) -> Self {
+    let mut copied_hash = [0; HASH_LEN];
+    copied_hash.copy_from_slice(&hash);
+
+    Self { hash: copied_hash, size }
+  }
+
   pub fn from_blob_bytes(bytes: &[u8]) -> Result<Self, Error> {
     let mut hasher = sha2::Sha256::default();
     hasher.update(bytes);
@@ -44,6 +51,10 @@ impl Pointer {
 
   pub fn hex(&self) -> String {
     hex::encode(self.hash)
+  }
+
+  pub fn hash(&self) -> &[u8; 32] {
+    &self.hash
   }
 
   pub fn path(&self) -> PathBuf {

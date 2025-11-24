@@ -29,9 +29,24 @@ pub enum Error {
   #[error("hex: {0}")]
   Hex(#[from] hex::FromHexError),
 
+  #[error("remote: {0}")]
+  Remote(#[from] crate::remote::RemoteError),
+
   #[error(transparent)]
   Git2(#[from] git2::Error),
 
   #[error("io: {0}")]
   Io(#[from] std::io::Error),
+}
+
+pub(crate) fn report_error(mut err: &dyn std::error::Error) -> String {
+  use std::fmt::Write;
+
+  let mut s = format!("{err}");
+  while let Some(src) = err.source() {
+    let _ = write!(s, "\n\ncaused by: {src}");
+    err = src;
+  }
+  
+  s
 }
