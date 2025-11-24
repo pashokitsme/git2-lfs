@@ -1,16 +1,16 @@
-mod reqwest;
+use std::fs::File;
+use std::io::BufWriter;
 
 use crate::Pointer;
-use std::fs::File;
 
 use async_trait::async_trait;
 
-use sha2::Digest;
-use sha2::Sha256;
+use tracing::*;
 
 pub use dto::*;
 
 mod dto;
+pub mod reqwest;
 
 #[derive(thiserror::Error, Debug)]
 pub enum RemoteError {
@@ -57,24 +57,47 @@ impl<'a, C: Download + Send + Sync> LfsRemote<'a, C> {
     Self { repo, client }
   }
 
-  pub async fn pull(&self, pointers: &[&Pointer]) -> Result<(), RemoteError> {
-    // self.client.download(&mut File::create("test")?).await?;
-    todo!()
-  }
-}
+  pub async fn pull(&self, pointers: &[Pointer]) -> Result<(), RemoteError> {
+    if pointers.is_empty() {
+      return Ok(());
+    }
 
-fn validate_checksum(pointer: &Pointer, bytes: &[u8]) -> Result<(), RemoteError> {
-  if bytes.len() != pointer.size() {
-    return Err(RemoteError::ChecksumMismatch);
-  }
+    let request = BatchRequest {
+      operation: "download".to_string(),
+      transfers: vec!["basic".to_string()],
+      objects: pointers.iter().map(|p| BatchObject { oid: p.hex(), size: p.size() as u64 }).collect(),
+      hash_algo: Some("sha256".to_string()),
+    };
 
-  let mut hasher = Sha256::new();
-  hasher.update(bytes);
-  let hash = hasher.finalize();
+    let response = self.client.batch(request).await?;
 
-  if hash.as_slice() != pointer.hash() {
-    return Err(RemoteError::ChecksumMismatch);
+    self.download_objects(response, pointers).await
   }
 
-  Ok(())
+  async fn download_objects(&self, response: BatchResponse, pointers: &[Pointer]) -> Result<(), RemoteError> {
+    let object_dir = self.repo.path().join("lfs/objects");
+
+    debug!(response = ?response);
+
+    for object in response.objects {
+      let actions = object.actions.ok_or(RemoteError::EmptyResponse)?;
+      let download_action = actions.download.ok_or(RemoteError::EmptyResponse)?;
+
+      let pointer = pointers.iter().find(|p| p.hex() == object.oid).ok_or(RemoteError::NotFound)?;
+
+      let path = object_dir.join(pointer.path());
+      std::fs::create_dir_all(path.parent().unwrap())?;
+
+      let mut buf = BufWriter::new(File::options().create_new(true).write(true).open(&path)?);
+
+      let downloaded_pointer = self.client.download(&download_action, &mut buf).await?;
+
+      if downloaded_pointer.hash() != pointer.hash() {
+        error!(path = %path.display(), expected = %pointer, got = %downloaded_pointer, "checksum mismatch; removing downloaded object");
+        std::fs::remove_file(path)?;
+        return Err(RemoteError::ChecksumMismatch);
+      }
+    }
+    Ok(())
+  }
 }

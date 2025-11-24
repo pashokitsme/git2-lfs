@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use std::io::BufWriter;
 use std::io::Write;
 use std::path::Path;
@@ -17,16 +19,28 @@ const VERSION: &str = "version https://git-lfs.github.com/spec/v1";
 const OID_PREFIX: &str = "oid sha256:";
 const SIZE_PREFIX: &str = "size ";
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 pub struct Pointer {
   hash: [u8; HASH_LEN],
   size: usize,
 }
 
+impl Display for Pointer {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "sha256:{} size {}", self.hex(), self.size)
+  }
+}
+
+impl std::fmt::Debug for Pointer {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.debug_struct("Pointer").field("hash", &self.hex()).field("size", &self.size).finish()
+  }
+}
+
 impl Pointer {
   pub fn from_parts(hash: &[u8], size: usize) -> Self {
     let mut copied_hash = [0; HASH_LEN];
-    copied_hash.copy_from_slice(&hash);
+    copied_hash.copy_from_slice(hash);
 
     Self { hash: copied_hash, size }
   }
@@ -98,11 +112,11 @@ impl Pointer {
   }
 
   pub fn from_str_short(bytes: &[u8]) -> Option<Self> {
-    match bytes.get(..118).map(str::from_utf8) {
+    match bytes.get(..(bytes.len().min(150))).map(str::from_utf8) {
       Some(Ok(text)) => {
         let pointer = Pointer::from_str(text);
         if let Err(ref err) = pointer {
-          debug!("Pointer::from_str_short: {:?}", err);
+          trace!("Pointer::from_str_short: {:?}", err);
         }
         pointer.ok()
       }
@@ -158,7 +172,7 @@ impl FromStr for Pointer {
     let mut hash = [0; HASH_LEN];
     hex::decode_to_slice(hex, &mut hash).map_err(Error::Hex)?;
 
-    debug!("Pointer::from_str: {:?} -> {:?}", s, Pointer { hash, size });
+    trace!("Pointer::from_str: {:?} -> {:?}", s, Pointer { hash, size });
 
     Ok(Pointer { hash, size })
   }

@@ -12,6 +12,7 @@ use crate::repo;
 use crate::sandbox;
 
 mod blob;
+mod pull;
 
 #[rstest]
 fn lfs_clean_add_naive(

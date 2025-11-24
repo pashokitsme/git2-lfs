@@ -15,17 +15,24 @@ use crate::remote::RemoteError;
 
 use crate::remote::dto::*;
 
+const MEDIA_TYPE: &str = "application/vnd.git-lfs+json";
+
 pub struct ReqwestLfsClient {
   client: reqwest::Client,
   url: Url,
+  access_token: Option<String>,
   headers: Option<HeaderMap>,
 }
 
 impl ReqwestLfsClient {
-  pub fn new(base_url: Url, access_token: Option<&str>) -> Result<Self, RemoteError> {
-    let mut url = base_url;
+  pub fn new(url: Url, access_token: Option<String>) -> Self {
+    Self { client: reqwest::Client::new(), url, access_token, headers: None }
+  }
 
-    if let Some(token) = access_token {
+  fn url_with_auth(&self, url: &str) -> Result<Url, RemoteError> {
+    let mut url = Url::parse(url)?;
+
+    if let Some(token) = &self.access_token {
       url
         .set_username("oauth2")
         .map_err(|_| RemoteError::UrlParse(url::ParseError::RelativeUrlWithoutBase))?;
@@ -34,7 +41,7 @@ impl ReqwestLfsClient {
         .map_err(|_| RemoteError::UrlParse(url::ParseError::RelativeUrlWithoutBase))?;
     }
 
-    Ok(Self { client: reqwest::Client::new(), url, headers: None })
+    Ok(url)
   }
 
   pub fn headers(self, headers: HeaderMap) -> Self {
@@ -45,13 +52,52 @@ impl ReqwestLfsClient {
 #[async_trait]
 impl Download for ReqwestLfsClient {
   async fn batch(&self, req: BatchRequest) -> Result<BatchResponse, RemoteError> {
-    todo!()
+    let mut batch_url = self.url_with_auth(self.url.as_str())?;
+    batch_url
+      .path_segments_mut()
+      .map_err(|_| RemoteError::UrlParse(url::ParseError::RelativeUrlWithoutBase))?
+      .pop_if_empty()
+      .push("objects")
+      .push("batch");
+
+    let mut request =
+      self.client.post(batch_url).header("Accept", MEDIA_TYPE).header("Content-Type", MEDIA_TYPE).json(&req);
+
+    if let Some(headers) = &self.headers {
+      request = request.headers(headers.clone());
+    }
+
+    let response = request.send().await.map_err(|e| RemoteError::Custom(Box::new(e)))?;
+
+    if !response.status().is_success() {
+      use reqwest::StatusCode as S;
+
+      return match response.status() {
+        S::FORBIDDEN => Err(RemoteError::AccessDenied),
+        S::NOT_FOUND => Err(RemoteError::NotFound),
+        _ => {
+          let status = response.status();
+          let body = response.text().await.unwrap_or_default();
+          Err(RemoteError::Download(format!("batch request failed: {} - {}", status, body)))
+        }
+      };
+    }
+
+    let result = response.json::<BatchResponse>().await.map_err(|e| RemoteError::Custom(Box::new(e)))?;
+
+    if result.objects.is_empty() {
+      return Err(RemoteError::EmptyResponse);
+    }
+
+    Ok(result)
   }
 
   async fn download(&self, action: &ObjectAction, to: &mut Write) -> Result<Pointer, RemoteError> {
     use futures::StreamExt;
 
-    let mut req = self.client.get(self.url.clone());
+    let url = self.url_with_auth(&action.href)?;
+
+    let mut req = self.client.get(url);
 
     if let Some(headers) = &self.headers {
       req = req.headers(headers.clone());
@@ -65,7 +111,11 @@ impl Download for ReqwestLfsClient {
       return match res.status() {
         S::FORBIDDEN => Err(RemoteError::AccessDenied),
         S::NOT_FOUND => Err(RemoteError::NotFound),
-        _ => Err(RemoteError::Custom(Box::new(res.error_for_status().unwrap_err()))),
+        _ => {
+          let status = res.status();
+          let body = res.text().await.unwrap_or_default();
+          Err(RemoteError::Download(format!("download failed: {} - {}", status, body)))
+        }
       };
     }
 
@@ -74,10 +124,10 @@ impl Download for ReqwestLfsClient {
 
     let mut checksum = Sha256::new();
 
-    while let Some(bytes) = bytes.next().await {
-      let bytes = bytes.map_err(|e| RemoteError::Download(crate::report_error(&e)))?;
-      total += to.write(&bytes)?;
-      checksum.update(&bytes);
+    while let Some(chunk) = bytes.next().await {
+      let chunk = chunk.map_err(|e| RemoteError::Download(crate::report_error(&e)))?;
+      total += to.write(&chunk)?;
+      checksum.update(&chunk);
     }
 
     let hash = checksum.finalize();
