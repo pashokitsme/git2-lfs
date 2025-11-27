@@ -12,6 +12,8 @@ pub use dto::*;
 mod dto;
 pub mod reqwest;
 
+pub const MEDIA_TYPE: &str = "application/vnd.git-lfs+json";
+
 #[derive(thiserror::Error, Debug)]
 pub enum RemoteError {
   #[error("access denied")]
@@ -89,6 +91,8 @@ impl<'a, C: Download + Send + Sync> LfsRemote<'a, C> {
       std::fs::create_dir_all(path.parent().unwrap())?;
 
       let mut buf = BufWriter::new(File::options().create_new(true).write(true).open(&path)?);
+
+      info!(path = %path.display(), download = ?download_action, "downloading lfs object");
 
       let downloaded_pointer = self.client.download(&download_action, &mut buf).await?;
 

@@ -14,8 +14,7 @@ use crate::remote::Download;
 use crate::remote::RemoteError;
 
 use crate::remote::dto::*;
-
-const MEDIA_TYPE: &str = "application/vnd.git-lfs+json";
+use crate::remote::MEDIA_TYPE;
 
 pub struct ReqwestLfsClient {
   client: reqwest::Client,
