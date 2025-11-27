@@ -10,6 +10,8 @@ use tracing::*;
 pub use dto::*;
 
 mod dto;
+
+#[cfg(feature = "reqwest-backend")]
 pub mod reqwest;
 
 pub const MEDIA_TYPE: &str = "application/vnd.git-lfs+json";

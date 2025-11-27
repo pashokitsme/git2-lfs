@@ -414,6 +414,7 @@ dependencies = [
  "ctor",
  "futures",
  "git2",
+ "git2-lfs",
  "hex",
  "more-asserts",
  "reqwest",

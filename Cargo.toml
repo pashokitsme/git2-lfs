@@ -3,6 +3,9 @@ name = "git2-lfs"
 version = "0.0.0"
 edition = "2024"
 
+[profile.test]
+features = ["reqwest-backend"]
+
 [dependencies]
 git2 = { git = "https://github.com/pashokitsme/git2-rs", branch = "filter", default-features = false, features = [
   "https",
@@ -25,6 +28,7 @@ reqwest = { optional = true, version = "0.12.24", features = [
 futures = { optional = true, version = "0.3.31" }
 
 [dev-dependencies]
+git2-lfs = { path = ".", features = ["reqwest-backend"] }
 anyhow = "1.0.100"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 assert_matches = "1.5.0"

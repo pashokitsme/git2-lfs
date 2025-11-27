@@ -13,8 +13,8 @@ use async_trait::async_trait;
 use crate::remote::Download;
 use crate::remote::RemoteError;
 
-use crate::remote::dto::*;
 use crate::remote::MEDIA_TYPE;
+use crate::remote::dto::*;
 
 pub struct ReqwestLfsClient {
   client: reqwest::Client,
@@ -28,21 +28,6 @@ impl ReqwestLfsClient {
     Self { client: reqwest::Client::new(), url, access_token, headers: None }
   }
 
-  fn url_with_auth(&self, url: &str) -> Result<Url, RemoteError> {
-    let mut url = Url::parse(url)?;
-
-    if let Some(token) = &self.access_token {
-      url
-        .set_username("oauth2")
-        .map_err(|_| RemoteError::UrlParse(url::ParseError::RelativeUrlWithoutBase))?;
-      url
-        .set_password(Some(token))
-        .map_err(|_| RemoteError::UrlParse(url::ParseError::RelativeUrlWithoutBase))?;
-    }
-
-    Ok(url)
-  }
-
   pub fn headers(self, headers: HeaderMap) -> Self {
     Self { headers: Some(headers), ..self }
   }
@@ -51,7 +36,7 @@ impl ReqwestLfsClient {
 #[async_trait]
 impl Download for ReqwestLfsClient {
   async fn batch(&self, req: BatchRequest) -> Result<BatchResponse, RemoteError> {
-    let mut batch_url = self.url_with_auth(self.url.as_str())?;
+    let mut batch_url = self.url.clone();
     batch_url
       .path_segments_mut()
       .map_err(|_| RemoteError::UrlParse(url::ParseError::RelativeUrlWithoutBase))?
@@ -61,6 +46,10 @@ impl Download for ReqwestLfsClient {
 
     let mut request =
       self.client.post(batch_url).header("Accept", MEDIA_TYPE).header("Content-Type", MEDIA_TYPE).json(&req);
+
+    if let Some(token) = &self.access_token {
+      request = request.basic_auth("oauth2", Some(token));
+    }
 
     if let Some(headers) = &self.headers {
       request = request.headers(headers.clone());
@@ -94,12 +83,10 @@ impl Download for ReqwestLfsClient {
   async fn download(&self, action: &ObjectAction, to: &mut Write) -> Result<Pointer, RemoteError> {
     use futures::StreamExt;
 
-    let url = self.url_with_auth(&action.href)?;
+    let mut req = self.client.get(&action.href);
 
-    let mut req = self.client.get(url);
-
-    if let Some(headers) = &self.headers {
-      req = req.headers(headers.clone());
+    for (key, value) in action.header.iter() {
+      req = req.header(key, value);
     }
 
     let res = req.send().await.map_err(|e| RemoteError::Custom(Box::new(e)))?;
