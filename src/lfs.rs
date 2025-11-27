@@ -125,26 +125,36 @@ impl LfsBuilder {
         let lfs = Lfs::new(src.repo(), &on_check_config);
 
         let Some(path) = src.path() else {
-          warn!("filter did't provide a path, skipping");
+          warn!("filter didn't provide a path, skipping");
           return Ok(false);
         };
 
-        let check = lfs.check(path).expect("FIX ME");
-
-        Ok(check)
+        match lfs.check(path) {
+          Ok(check) => Ok(check),
+          Err(e) => {
+            error!(path = %path.display(), "error checking lfs: {}", crate::report_error(&e));
+            Err(git2::Error::from_str(&crate::report_error(&e)))
+          }
+        }
       })
       .on_apply(move |_, _, mut to, from, src| {
         let lfs = Lfs::new(src.repo(), &on_apply_config);
 
         match src.mode() {
-          FilterMode::Clean => {
-            lfs.clean(from.as_bytes(), &mut to.as_allocated_vec()).expect("FIX ME");
-            Ok(())
-          }
-          FilterMode::Smudge => {
-            lfs.smudge(from.as_bytes(), &mut to.as_allocated_vec()).expect("FIX ME");
-            Ok(())
-          }
+          FilterMode::Clean => match lfs.clean(from.as_bytes(), &mut to.as_allocated_vec()) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+              error!(path = %src.path().unwrap().display(), "error cleaning lfs: {}", crate::report_error(&e));
+              Err(git2::Error::from_str(&crate::report_error(&e)))
+            }
+          },
+          FilterMode::Smudge => match lfs.smudge(from.as_bytes(), &mut to.as_allocated_vec()) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+              error!(path = %src.path().unwrap().display(), "error smudging lfs: {}", crate::report_error(&e));
+              Err(git2::Error::from_str(&crate::report_error(&e)))
+            }
+          },
         }
       });
 
