@@ -391,7 +391,7 @@ dependencies = [
 [[package]]
 name = "git2"
 version = "0.20.2"
-source = "git+https://github.com/pashokitsme/git2-rs?branch=filter#c625be9f4635d99cd485d4b19e2c5658d9c6938a"
+source = "git+https://github.com/pashokitsme/git2-rs.git?branch=filter#c625be9f4635d99cd485d4b19e2c5658d9c6938a"
 dependencies = [
  "bitflags",
  "libc",
@@ -756,13 +756,28 @@ checksum = "2874a2af47a2325c2001a6e6fad9b16a53b802102b528163885171cf92b15976"
 [[package]]
 name = "libgit2-sys"
 version = "0.18.1+1.9.0"
-source = "git+https://github.com/pashokitsme/git2-rs?branch=filter#c625be9f4635d99cd485d4b19e2c5658d9c6938a"
+source = "git+https://github.com/pashokitsme/git2-rs.git?branch=filter#c625be9f4635d99cd485d4b19e2c5658d9c6938a"
+dependencies = [
+ "cc",
+ "libc",
+ "libssh2-sys",
+ "libz-sys",
+ "openssl-sys",
+ "pkg-config",
+]
+
+[[package]]
+name = "libssh2-sys"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "220e4f05ad4a218192533b300327f5150e809b54c4ec83b5a1d91833601811b9"
 dependencies = [
  "cc",
  "libc",
  "libz-sys",
  "openssl-sys",
  "pkg-config",
+ "vcpkg",
 ]
 
 [[package]]
