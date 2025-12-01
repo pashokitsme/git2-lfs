@@ -11,8 +11,11 @@ pub use dto::*;
 
 mod dto;
 
-#[cfg(feature = "reqwest-backend")]
+#[cfg(all(feature = "reqwest-backend", not(target_family = "wasm")))]
 pub mod reqwest;
+
+#[cfg(all(feature = "reqwest-backend", target_family = "wasm"))]
+compile_error!("reqwest backend is not supported on wasm target");
 
 pub const MEDIA_TYPE: &str = "application/vnd.git-lfs+json";
 
