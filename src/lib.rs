@@ -6,6 +6,8 @@ mod pointer;
 
 pub use pointer::Pointer;
 
+pub use sha2;
+
 pub use lfs::Lfs;
 pub use lfs::LfsBuilder;
 
@@ -47,6 +49,6 @@ pub fn report_error(mut err: &dyn std::error::Error) -> String {
     let _ = write!(s, "\n\ncaused by: {src}");
     err = src;
   }
-  
+
   s
 }
