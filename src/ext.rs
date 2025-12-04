@@ -70,7 +70,7 @@ impl RepoLfsExt for git2::Repository {
       let oid = entry.id();
       let Ok(blob) = self.find_blob(oid) else {
         warn!(
-          "blob '{}' ({}{}) didn't found during traversing tree {}",
+          "blob '{}' ({}{}) not found during traversing tree {}",
           oid,
           dir,
           entry.name().unwrap_or_default(),
