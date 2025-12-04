@@ -3,7 +3,7 @@ use std::sync::OnceLock;
 use assertables::assert_some;
 use git2_lfs::ext::RemoteLfsExt;
 use git2_lfs::ext::RepoLfsExt;
-use git2_lfs::remote::LfsRemote;
+use git2_lfs::remote::LfsClient;
 use git2_lfs::remote::reqwest::ReqwestLfsClient;
 use rstest::rstest;
 use tempfile::TempDir;
@@ -62,7 +62,7 @@ async fn lfs_pull_missing(sandbox: TempDir) -> Result<(), anyhow::Error> {
   let missing = repo.find_tree_missing_lfs_objects(&tree)?;
 
   let client = ReqwestLfsClient::new(lfs_url, None);
-  let lfs_remote = LfsRemote::new(&repo, client);
+  let lfs_remote = LfsClient::new(&repo, client);
 
   lfs_remote.pull(&missing).await?;
 

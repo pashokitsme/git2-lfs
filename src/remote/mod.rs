@@ -63,7 +63,7 @@ pub trait LfsRemote: Send + Sync {
   async fn verify(&self, action: &ObjectAction, pointer: &Pointer) -> Result<(), RemoteError>;
 }
 
-pub struct LfsRemote<'a, C: Send + Sync> {
+pub struct LfsClient<'a, C: Send + Sync> {
   repo: &'a git2::Repository,
   client: C,
 }
