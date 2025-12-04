@@ -1,11 +1,8 @@
 use crate::Pointer;
-use crate::remote::Read;
 use crate::remote::Remote;
 use crate::remote::Write;
 use crate::remote::dto::BatchResponse;
-use crate::report_error;
 
-use reqwest::Body;
 use reqwest::header::HeaderMap;
 use url::Url;
 
