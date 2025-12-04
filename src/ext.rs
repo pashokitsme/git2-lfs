@@ -13,7 +13,7 @@ use crate::pointer::POINTER_ROUGH_LEN;
 pub trait RepoLfsExt {
   fn get_lfs_blob_content<'r>(&self, blob: &'r git2::Blob<'_>) -> Result<Cow<'r, [u8]>, Error>;
   fn find_tree_missing_lfs_objects(&self, tree: &git2::Tree<'_>) -> Result<Vec<Pointer>, Error>;
-  fn find_objects_to_push(
+  fn find_lfs_objects_to_push(
     &self,
     reference: &git2::Reference,
     upstream: &git2::Reference,
@@ -106,7 +106,7 @@ impl RepoLfsExt for git2::Repository {
     Ok(missing)
   }
 
-  fn find_objects_to_push(
+  fn find_lfs_objects_to_push(
     &self,
     reference: &git2::Reference,
     upstream: &git2::Reference,
