@@ -183,3 +183,51 @@ fn lfs_checkout_same_file_twice(
 
   Ok(())
 }
+
+#[rstest]
+fn lfs_smudge_missing_object(
+  _sandbox: TempDir,
+  #[with(&_sandbox)] repo: git2::Repository,
+) -> Result<(), anyhow::Error> {
+  let bin = b"missing blob content";
+  let bin_path = Path::new("missing.bin");
+
+  let workdir = repo.workdir().unwrap();
+
+  // Create a pointer for the blob
+  let pointer = Pointer::from_blob_bytes(bin)?;
+  let pointer_bytes = pointer.as_bytes()?;
+
+  // Ensure the LFS object does NOT exist
+  let hex = pointer.hex();
+  let object_path = repo.path().join("lfs/objects/").join(&hex[..2]).join(&hex[2..4]).join(&hex);
+  assert!(!object_path.exists());
+
+  assert_ok!(std::fs::write(workdir.join(bin_path), bin), "failed to write pointer to file");
+
+  let mut index = repo.index().unwrap();
+  index.add_all(["*"], IndexAddOption::default(), None).unwrap();
+  index.write().unwrap();
+
+  let tree_id = index.write_tree().unwrap();
+  let tree = repo.find_tree(tree_id).unwrap();
+
+  let signature = git2::Signature::now("Tester", "tester@example.com").unwrap();
+  repo.commit(Some("HEAD"), &signature, &signature, "add missing.bin", &tree, &[]).unwrap();
+
+  std::fs::remove_dir_all(repo.path().join("lfs/objects"))?;
+
+  assert!(!object_path.exists(), "lfs object shouldn't exist at this point");
+
+  std::fs::remove_file(workdir.join(bin_path)).unwrap();
+  assert!(!workdir.join(bin_path).exists());
+
+  let mut checkout = CheckoutBuilder::new();
+  checkout.force();
+  repo.checkout_head(Some(&mut checkout)).unwrap();
+
+  let content = std::fs::read(workdir.join(bin_path))?;
+  assert_eq!(String::from_utf8(content)?, String::from_utf8(pointer_bytes)?);
+
+  Ok(())
+}

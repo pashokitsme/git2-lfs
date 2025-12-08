@@ -1,12 +1,11 @@
 use std::collections::HashSet;
 use std::io::BufReader;
-use std::io::Cursor;
-use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use git2::Filter;
+use git2::FilterBuf;
 use git2::FilterMode;
 use git2::FilterRepository;
 
@@ -47,23 +46,21 @@ impl<'a> Lfs<'a> {
     Ok(false)
   }
 
-  pub fn clean(self, input: &[u8], out: &mut impl Write) -> Result<(), Error> {
+  pub fn clean(self, input: &[u8], out: &mut FilterBuf) -> Result<bool, Error> {
     let pointer = Pointer::from_blob_bytes(input)?;
     self.store_object_if_not_exists(&pointer, input)?;
-    pointer.write_pointer(out)?;
+    pointer.write_pointer(&mut out.as_allocated_vec())?;
 
-    Ok(())
+    Ok(true)
   }
 
-  pub fn smudge(self, input: &[u8], out: &mut impl Write) -> Result<(), Error> {
+  pub fn smudge(self, input: &[u8], out: &mut FilterBuf) -> Result<bool, Error> {
     let Some(pointer) = Pointer::from_str_short(input) else {
       debug!("not a lfs pointer, passing through");
-      std::io::copy(&mut Cursor::new(input), out)?;
-      return Ok(());
+      return Ok(false);
     };
 
-    self.load_object(&pointer, out)?;
-    Ok(())
+    self.load_object(&pointer, out)
   }
 
   fn store_object_if_not_exists(self, pointer: &Pointer, bytes: &[u8]) -> Result<(), Error> {
@@ -78,21 +75,21 @@ impl<'a> Lfs<'a> {
     Ok(())
   }
 
-  fn load_object(self, pointer: &Pointer, out: &mut impl Write) -> Result<(), Error> {
+  fn load_object(self, pointer: &Pointer, out: &mut FilterBuf) -> Result<bool, Error> {
     let object_dir = self.object_dir();
     let path = self.object_dir().join(pointer.path());
 
     if !path.exists() {
       warn!(path = %path.strip_prefix(&object_dir).unwrap_or(&path).display(), "object not found, skipping");
-      return Ok(());
+      return Ok(false);
     }
 
     debug!(path = %path.strip_prefix(&object_dir).unwrap_or(&path).display(), "reading lfs object");
 
     let file = std::fs::File::open(&path)?;
     let mut reader = BufReader::new(file);
-    std::io::copy(&mut reader, out)?;
-    Ok(())
+    std::io::copy(&mut reader, &mut out.as_allocated_vec())?;
+    Ok(true)
   }
 
   fn object_dir(&self) -> PathBuf {
@@ -141,15 +138,15 @@ impl LfsBuilder {
         let lfs = Lfs::new(src.repo(), &on_apply_config);
 
         match src.mode() {
-          FilterMode::Clean => match lfs.clean(from.as_bytes(), &mut to.as_allocated_vec()) {
-            Ok(()) => Ok(()),
+          FilterMode::Clean => match lfs.clean(from.as_bytes(), &mut to) {
+            Ok(applied) => Ok(applied),
             Err(e) => {
               error!(path = %src.path().unwrap().display(), "error cleaning lfs: {}", crate::report_error(&e));
               Err(git2::Error::from_str(&crate::report_error(&e)))
             }
           },
-          FilterMode::Smudge => match lfs.smudge(from.as_bytes(), &mut to.as_allocated_vec()) {
-            Ok(()) => Ok(()),
+          FilterMode::Smudge => match lfs.smudge(from.as_bytes(), &mut to) {
+            Ok(applied) => Ok(applied),
             Err(e) => {
               error!(path = %src.path().unwrap().display(), "error smudging lfs: {}", crate::report_error(&e));
               Err(git2::Error::from_str(&crate::report_error(&e)))
