@@ -108,7 +108,7 @@ impl LfsBuilder {
     self
   }
 
-  pub fn install(self) -> Result<(), Error> {
+  pub fn install(self, attributes: &str) -> Result<(), Error> {
     let mut filter = Filter::<()>::new()?;
 
     let config = Arc::new(self);
@@ -118,7 +118,12 @@ impl LfsBuilder {
 
     filter
       .on_init(|_| Ok(()))
-      .on_check(move |_, _, src, _| {
+      .attributes(attributes)?
+      .on_check(move |_, _, src, attrs| {
+        if attrs.is_some() {
+          return Ok(true);
+        }
+
         let lfs = Lfs::new(src.repo(), &on_check_config);
 
         let Some(path) = src.path() else {

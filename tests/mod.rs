@@ -11,7 +11,9 @@ mod pointer;
 #[fixture]
 pub fn repo(#[default(&sandbox())] sandbox: &TempDir) -> git2::Repository {
   static ONCE: Once = Once::new();
-  ONCE.call_once(|| LfsBuilder::default().with_file_extensions(&["bin"]).install().unwrap());
+  ONCE.call_once(|| LfsBuilder::default().install("filter=lfs").unwrap());
+
+  std::fs::write(sandbox.path().join(".gitattributes"), "*.bin filter=lfs diff=lfs").unwrap();
 
   git2::Repository::init(sandbox.path()).unwrap()
 }

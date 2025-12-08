@@ -16,6 +16,33 @@ mod pull;
 mod push;
 
 #[rstest]
+fn lfs_ignore_nonlfs_files(
+  sandbox: TempDir,
+  #[with(&sandbox)] repo: git2::Repository,
+) -> Result<(), anyhow::Error> {
+  let object_dir = repo.path().join("lfs/objects");
+
+  assert!(!object_dir.exists());
+
+  std::fs::write(sandbox.path().join("hello.txt"), "hello").unwrap();
+
+  let mut index = repo.index().unwrap();
+  index.add_all(["*"], IndexAddOption::default(), None).unwrap();
+  index.write().unwrap();
+
+  let tree_id = index.write_tree().unwrap();
+  let tree = repo.find_tree(tree_id).unwrap();
+
+  let blob_oid = tree.get_path(Path::new("hello.txt")).unwrap().id();
+  let blob = repo.find_blob(blob_oid).unwrap();
+  assert_eq!(String::from_utf8(blob.content().to_vec()).unwrap(), "hello");
+
+  assert!(!object_dir.exists());
+
+  Ok(())
+}
+
+#[rstest]
 fn lfs_clean_add_naive(
   _sandbox: TempDir,
   #[with(&_sandbox)] repo: git2::Repository,
@@ -228,6 +255,20 @@ fn lfs_smudge_missing_object(
 
   let content = std::fs::read(workdir.join(bin_path))?;
   assert_eq!(String::from_utf8(content)?, String::from_utf8(pointer_bytes)?);
+
+  Ok(())
+}
+
+#[rstest]
+fn repo_read_attrs(sandbox: TempDir) -> Result<(), anyhow::Error> {
+  std::fs::write(sandbox.path().join(".gitattributes"), "*.bin filter=lfs diff=lfs").unwrap();
+
+  std::fs::write(sandbox.path().join("hello.bin"), "hello").unwrap();
+
+  let repo = git2::Repository::init(sandbox.path()).unwrap();
+  let attr = repo.get_attr(Path::new("hello.bin"), "filter", AttrCheckFlags::default()).unwrap();
+
+  dbg!(attr);
 
   Ok(())
 }
