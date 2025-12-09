@@ -20,26 +20,9 @@ reqwest = { optional = true, version = "0.12.24", features = [
   "json",
   "stream",
 ] }
-
 futures = { optional = true, version = "0.3.31" }
 
-[target.'cfg(target_family = "wasm")'.dependencies]
-git2 = { git = "https://github.com/pashokitsme/git2-rs.git", branch = "filter", default-features = false, features = [
-  "vendored-libgit2",
-] }
-
-[target.'cfg(any(target_os = "macos", target_os = "linux", target_os = "android"))'.dependencies]
-git2 = { git = "https://github.com/pashokitsme/git2-rs.git", branch = "filter", default-features = false, features = [
-  "https",
-  "ssh",
-  "vendored-openssl",
-  "vendored-libgit2",
-] }
-
-[target.'cfg(target_os = "windows")'.dependencies]
-git2 = { git = "https://github.com/pashokitsme/git2-rs.git", branch = "filter", default-features = false, features = [
-  "https",
-  "ssh",
+git2 = { git = "https://github.com/pashokitsme/git2-rs.git", branch = "filter", features = [
   "vendored-libgit2",
 ] }
 
