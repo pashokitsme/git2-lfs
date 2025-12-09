@@ -16,8 +16,8 @@ pub trait RepoLfsExt {
   fn find_tree_missing_lfs_objects(&self, tree: &git2::Tree<'_>) -> Result<Vec<Pointer>, Error>;
   fn find_lfs_objects_to_push(
     &self,
-    reference: &git2::Reference,
-    upstream: &git2::Reference,
+    local_branch: &git2::Reference,
+    upstream_branch: Option<&git2::Reference>,
   ) -> Result<Vec<Pointer>, Error>;
 }
 
@@ -107,14 +107,17 @@ impl RepoLfsExt for git2::Repository {
   fn find_lfs_objects_to_push(
     &self,
     local_branch: &git2::Reference,
-    upstream_branch: &git2::Reference,
+    upstream_branch: Option<&git2::Reference>,
   ) -> Result<Vec<Pointer>, Error> {
     let mut objects_to_push = HashSet::new();
 
     let mut revwalk = self.revwalk()?;
 
     revwalk.push(local_branch.peel_to_commit()?.id())?;
-    revwalk.hide(upstream_branch.peel_to_commit()?.id())?;
+
+    if let Some(upstream_branch) = upstream_branch {
+      revwalk.hide(upstream_branch.peel_to_commit()?.id())?;
+    }
 
     for commit in revwalk {
       let commit = self.find_commit(commit?)?;
