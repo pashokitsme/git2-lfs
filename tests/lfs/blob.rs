@@ -4,7 +4,7 @@ use std::path::Path;
 use assert_matches::assert_matches;
 use git2::ErrorCode;
 use git2_lfs::Pointer;
-use git2_lfs::ext::{BlobLfsExt, RepoLfsExt};
+use git2_lfs::ext::RepoLfsExt;
 use rstest::rstest;
 use tempfile::TempDir;
 
@@ -20,7 +20,7 @@ fn repo_get_lfs_blob_content_returns_owned_bytes_for_pointer(
   let blob_bytes = b"blob content";
 
   let blob = write_blob(&repo, path, blob_bytes)?;
-  assert!(blob.is_lfs_pointer());
+  assert!(Pointer::is_pointer(blob.content()));
 
   let resolved = repo.get_lfs_blob_content(&blob)?;
 
@@ -39,7 +39,7 @@ fn repo_get_lfs_blob_content_returns_borrowed_bytes_for_regular_blob(
   let blob_bytes = b"hello world";
 
   let blob = write_blob(&repo, path, blob_bytes)?;
-  assert!(!blob.is_lfs_pointer());
+  assert!(!Pointer::is_pointer(blob.content()));
 
   let resolved = repo.get_lfs_blob_content(&blob)?;
 
@@ -85,8 +85,8 @@ fn blob_is_lfs_pointer_reports_pointer_state(
   let pointer_blob = write_blob(&repo, pointer_path, pointer_bytes)?;
   let text_blob = write_blob(&repo, text_path, text_bytes)?;
 
-  assert!(pointer_blob.is_lfs_pointer());
-  assert!(!text_blob.is_lfs_pointer());
+  assert!(Pointer::is_pointer(pointer_blob.content()));
+  assert!(!Pointer::is_pointer(text_blob.content()));
 
   Ok(())
 }

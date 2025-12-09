@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashSet;
 use std::path::Path;
 use std::str::FromStr;
 
@@ -22,10 +23,6 @@ pub trait RepoLfsExt {
 
 pub trait RemoteLfsExt {
   fn lfs_url(&self) -> Option<Url>;
-}
-
-pub trait BlobLfsExt {
-  fn is_lfs_pointer(&self) -> bool;
 }
 
 impl RemoteLfsExt for Remote<'_> {
@@ -95,6 +92,7 @@ impl RepoLfsExt for git2::Repository {
             dir,
             entry.name().unwrap_or_default()
           );
+
           missing.push(pointer)
         }
         _ => (),
@@ -108,38 +106,46 @@ impl RepoLfsExt for git2::Repository {
 
   fn find_lfs_objects_to_push(
     &self,
-    reference: &git2::Reference,
-    upstream: &git2::Reference,
+    local_branch: &git2::Reference,
+    upstream_branch: &git2::Reference,
   ) -> Result<Vec<Pointer>, Error> {
-    let head_tree = reference.resolve()?.peel_to_tree()?;
-    let upstream_tree = upstream.resolve()?.peel_to_tree()?;
+    let mut objects_to_push = HashSet::new();
 
-    let diff = self.diff_tree_to_tree(Some(&upstream_tree), Some(&head_tree), None)?;
+    let mut revwalk = self.revwalk()?;
 
-    let mut objects_to_push = Vec::new();
+    revwalk.push(local_branch.peel_to_commit()?.id())?;
+    revwalk.hide(upstream_branch.peel_to_commit()?.id())?;
 
-    for delta in diff.deltas().filter(|d| d.new_file().exists()) {
-      let maybe_lfs_oid = delta.new_file().id();
-      let blob = self.find_blob(delta.new_file().id())?;
+    for commit in revwalk {
+      let commit = self.find_commit(commit?)?;
+      let tree = commit.tree()?;
 
-      if !POINTER_ROUGH_LEN.contains(&blob.size()) {
-        continue;
-      }
+      tree.walk(git2::TreeWalkMode::PostOrder, |_, entry| {
+        let Some(ObjectType::Blob) = entry.kind() else {
+          return TreeWalkResult::Ok;
+        };
 
-      let Ok(pointer) = Pointer::from_str(String::from_utf8_lossy(blob.content()).as_ref()) else {
-        debug!(oid = %maybe_lfs_oid, "skipping non-lfs pointer file");
-        continue;
-      };
+        let oid = entry.id();
 
-      objects_to_push.push(pointer);
+        let Ok(blob) = self.find_blob(oid) else {
+          return TreeWalkResult::Ok;
+        };
+
+        if !POINTER_ROUGH_LEN.contains(&blob.size()) {
+          return TreeWalkResult::Ok;
+        }
+
+        let Ok(pointer) = Pointer::from_str(String::from_utf8_lossy(blob.content()).as_ref()) else {
+          debug!(oid = %oid, "skipping non-lfs pointer file");
+          return TreeWalkResult::Ok;
+        };
+
+        debug!(blob = %oid, commit = %commit.id(), "found lfs-pointer!");
+        objects_to_push.insert(pointer);
+        TreeWalkResult::Ok
+      })?;
     }
 
-    Ok(objects_to_push)
-  }
-}
-
-impl BlobLfsExt for git2::Blob<'_> {
-  fn is_lfs_pointer(&self) -> bool {
-    Pointer::is_pointer(self.content())
+    Ok(objects_to_push.into_iter().collect())
   }
 }
