@@ -22,7 +22,7 @@ reqwest = { optional = true, version = "0.12.24", features = [
 ] }
 futures = { optional = true, version = "0.3.31" }
 
-git2 = { git = "https://github.com/pashokitsme/git2-rs.git", branch = "filter", features = [
+git2 = { git = "https://github.com/pashokitsme/git2-rs.git", branch = "filter", default-features = false, features = [
   "vendored-libgit2",
 ] }
 
@@ -41,4 +41,9 @@ tokio = { version = "1", features = ["rt", "macros"] }
 
 
 [features]
+default = ["git2-https", "git2-ssh", "git2-vendored-openssl"]
+
 reqwest-backend = ["reqwest", "futures"]
+git2-https = ["git2/https"]
+git2-ssh = ["git2/ssh"]
+git2-vendored-openssl = ["git2/vendored-openssl"]
