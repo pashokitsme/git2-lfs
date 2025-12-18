@@ -14,6 +14,7 @@ use crate::pointer::POINTER_ROUGH_LEN;
 pub trait RepoLfsExt {
   fn get_lfs_blob_content<'r>(&self, blob: &'r git2::Blob<'_>) -> Result<Cow<'r, [u8]>, Error>;
   fn find_tree_missing_lfs_objects(&self, tree: &git2::Tree<'_>) -> Result<Vec<Pointer>, Error>;
+  fn try_get_dangling_pointer(&self, rel_path: &Path) -> Result<Option<Pointer>, Error>;
   fn find_lfs_objects_to_push(
     &self,
     local_branch: &git2::Reference,
@@ -37,6 +38,22 @@ impl RemoteLfsExt for Remote<'_> {
 }
 
 impl RepoLfsExt for git2::Repository {
+  fn try_get_dangling_pointer(&self, rel_path: &Path) -> Result<Option<Pointer>, Error> {
+    let Some(workdir) = self.workdir() else {
+      return Ok(None);
+    };
+    let abs_path = workdir.join(rel_path);
+
+    let size = abs_path.metadata()?.len() as usize;
+
+    if !crate::pointer::POINTER_ROUGH_LEN.contains(&size) {
+      return Ok(None);
+    }
+
+    let content = std::fs::read(abs_path)?;
+    Ok(Pointer::from_str_short(&content))
+  }
+
   fn get_lfs_blob_content<'r>(&self, blob: &'r git2::Blob<'_>) -> Result<Cow<'r, [u8]>, Error> {
     let Some(pointer) = Pointer::from_str_short(blob.content()) else {
       return Ok(Cow::Borrowed(blob.content()));
