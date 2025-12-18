@@ -62,18 +62,8 @@ impl RepoLfsExt for git2::Repository {
     let path = self.path().join("lfs/objects").join(pointer.path());
 
     if !path.exists() {
-      let err = git2::Error::new(
-        ErrorCode::NotFound,
-        ErrorClass::Odb,
-        format!(
-          "object '{}' contains lfs pointer but the target object '{}' wasn't found (tried {})",
-          blob.id(),
-          pointer.hex(),
-          Path::new("lfs/objects").join(pointer.path()).display()
-        ),
-      );
-
-      return Err(err.into());
+      warn!(pointer = %pointer, "lfs object not found; returning the original content");
+      return Ok(Cow::Borrowed(blob.content()));
     }
 
     let content = std::fs::read(path)?;
