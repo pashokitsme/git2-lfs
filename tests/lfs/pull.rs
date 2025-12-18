@@ -31,20 +31,21 @@ async fn lfs_resolve_missing_objects(sandbox: TempDir) -> Result<(), anyhow::Err
   let repo = init_test_repo(&sandbox);
 
   let tree = repo.head()?.peel_to_tree()?;
-  let missing = repo.find_tree_missing_lfs_objects(&tree)?;
-
+  let mut missing = repo.find_tree_missing_lfs_objects(&tree)?;
+  missing.sort_by_key(|p| p.hex());
+  
   let mut missing = missing.iter();
 
   assert_eq!(missing.len(), 2, "expected 2 missing objects, got {:?}", missing);
 
   assert_eq!(
     assert_some!(missing.next()).hex(),
-    "f2ca1bb6c7e907d06dafe4687e579fce76b37e4e93b7605022da52e6ccc26fd2"
+    "2979f96ff274fb60b4e4fe1544c785a0b46ce8781031906619b26579c20f27e3"
   );
 
   assert_eq!(
     assert_some!(missing.next()).hex(),
-    "2979f96ff274fb60b4e4fe1544c785a0b46ce8781031906619b26579c20f27e3"
+    "f2ca1bb6c7e907d06dafe4687e579fce76b37e4e93b7605022da52e6ccc26fd2"
   );
 
   Ok(())

@@ -268,7 +268,71 @@ fn repo_read_attrs(sandbox: TempDir) -> Result<(), anyhow::Error> {
   let repo = git2::Repository::init(sandbox.path()).unwrap();
   let attr = repo.get_attr(Path::new("hello.bin"), "filter", AttrCheckFlags::default()).unwrap();
 
-  dbg!(attr);
+  assert_matches!(attr, Some("lfs"));
+
+  Ok(())
+}
+
+#[rstest]
+fn lfs_checkout_checkout_pointer_and_object(
+  _sandbox: TempDir,
+  #[with(&_sandbox)] repo: git2::Repository,
+) -> Result<(), anyhow::Error> {
+  let bin = b"blob content for lfs test";
+  let bin_path = Path::new("bin.bin");
+  let workdir = repo.workdir().unwrap();
+
+  let txt = b"text content for lfs test";
+  let txt_path = Path::new("text.txt");
+
+  let pointer = Pointer::from_blob_bytes(bin)?;
+  let pointer_bytes = pointer.as_bytes()?;
+
+  let hex = pointer.hex();
+  let object_path = repo.path().join("lfs/objects/").join(&hex[..2]).join(&hex[2..4]).join(&hex);
+
+  assert!(!object_path.exists());
+
+  assert_ok!(std::fs::write(workdir.join(bin_path), &bin), "failed to write pointer to file");
+
+  std::fs::write(workdir.join(txt_path), &txt)?;
+
+  let mut index = repo.index().unwrap();
+  index.add_all(["*"], IndexAddOption::default(), None).unwrap();
+  index.write().unwrap();
+  let tree_id = index.write_tree().unwrap();
+
+  let signature = git2::Signature::now("Tester", "tester@example.com").unwrap();
+  repo
+    .commit(Some("HEAD"), &signature, &signature, "add bin.bin with pointer", &repo.find_tree(tree_id)?, &[])
+    .unwrap();
+
+  assert!(object_path.exists());
+  assert_eq!(assert_ok!(std::fs::read(workdir.join(bin_path))), bin);
+
+  std::fs::remove_file(&object_path).unwrap();
+  std::fs::remove_file(workdir.join(bin_path)).unwrap();
+
+  let mut checkout = CheckoutBuilder::new();
+  checkout.force();
+  repo.checkout_tree(&repo.head()?.peel(ObjectType::Tree)?, Some(&mut checkout))?;
+
+  assert_eq!(assert_ok!(std::fs::read(workdir.join(bin_path))), pointer_bytes);
+
+  assert_eq!(assert_ok!(std::fs::read(workdir.join(txt_path))), txt);
+  std::fs::write(workdir.join(txt_path), "hello")?;
+
+  std::fs::write(&object_path, &bin)?;
+
+  let status = repo.status_file(&bin_path)?;
+
+  assert_matches!(status, Status::CURRENT);
+
+  std::fs::write(workdir.join(bin_path), bin)?;
+  assert_eq!(assert_ok!(std::fs::read(workdir.join(bin_path))), bin);
+
+  assert_matches!(status, Status::CURRENT);
+  assert_eq!(assert_ok!(std::fs::read_to_string(workdir.join(txt_path))), "hello");
 
   Ok(())
 }
