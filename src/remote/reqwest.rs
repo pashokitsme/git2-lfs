@@ -16,6 +16,8 @@ use crate::remote::RemoteError;
 use crate::remote::MEDIA_TYPE;
 use crate::remote::dto::*;
 
+const USER_AGENT: &str = "gx-lfs/0.0.0";
+
 trait ReqwestExt {
   async fn or_err<T: FnOnce(String) -> RemoteError>(
     self,
@@ -51,7 +53,7 @@ impl ReqwestExt for Result<reqwest::Response, reqwest::Error> {
       use reqwest::StatusCode as S;
 
       return match res.status() {
-        S::FORBIDDEN => Err(RemoteError::AccessDenied),
+        S::FORBIDDEN | S::UNAUTHORIZED => Err(RemoteError::AccessDenied),
         S::NOT_FOUND => Err(RemoteError::NotFound),
         _ => {
           let status = res.status();
@@ -76,8 +78,13 @@ impl LfsRemote for ReqwestLfsClient {
       .push("objects")
       .push("batch");
 
-    let mut request =
-      self.client.post(batch_url).header("Accept", MEDIA_TYPE).header("Content-Type", MEDIA_TYPE).json(&req);
+    let mut request = self
+      .client
+      .post(batch_url)
+      .header("User-Agent", USER_AGENT)
+      .header("Accept", MEDIA_TYPE)
+      .header("Content-Type", MEDIA_TYPE)
+      .json(&req);
 
     if let Some(token) = &self.access_token {
       request = request.basic_auth("oauth2", Some(token));
@@ -106,6 +113,8 @@ impl LfsRemote for ReqwestLfsClient {
       req = req.header(key, value);
     }
 
+    req = req.header("User-Agent", USER_AGENT);
+
     let res = req.send().await.or_err(RemoteError::Download).await?;
 
     let mut bytes = res.bytes_stream();
@@ -131,17 +140,21 @@ impl LfsRemote for ReqwestLfsClient {
       req = req.header(key, value);
     }
 
+    req = req.header("User-Agent", USER_AGENT);
+
     req.body(blob.to_owned()).send().await.or_err(RemoteError::Upload).await?;
 
     Ok(())
   }
 
   async fn verify(&self, action: &ObjectAction, pointer: &Pointer) -> Result<(), RemoteError> {
-    let mut req = self.client.put(&action.href);
+    let mut req = self.client.post(&action.href);
 
     for (key, value) in action.header.iter() {
       req = req.header(key, value);
     }
+
+    req = req.header("User-Agent", USER_AGENT);
 
     req
       .json(&BatchObject { oid: pointer.hex(), size: pointer.size() as u64 })
