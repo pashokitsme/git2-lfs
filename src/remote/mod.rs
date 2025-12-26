@@ -1,5 +1,7 @@
 use std::fs::File;
 use std::io::BufWriter;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use crate::Pointer;
@@ -60,6 +62,24 @@ pub enum RemoteError {
 pub type Write = dyn std::io::Write + Send;
 pub type Read = dyn std::io::Read + Send;
 
+pub enum Progress {
+  Download(ProgressEvent),
+  Verify(ProgressEvent),
+  Upload(ProgressEvent),
+}
+
+pub struct ProgressEvent {
+  pub total_objects: usize,
+  pub total_bytes: usize,
+
+  pub bytes_handled: usize,
+  pub objects_handled: usize,
+
+  pub next_object_size: usize,
+}
+
+pub type OnProgress<'a> = dyn Fn(Progress) -> () + 'a;
+
 #[async_trait]
 pub trait LfsRemote: Send + Sync {
   async fn batch(&self, req: BatchRequest) -> Result<BatchResponse, RemoteError>;
@@ -71,16 +91,21 @@ pub trait LfsRemote: Send + Sync {
 pub struct LfsClient<'a, C: Send + Sync> {
   repo: &'a git2::Repository,
   client: C,
+  on_progress: Option<Box<OnProgress<'a>>>,
   concurrency_limit: usize,
 }
 
 impl<'a, C: LfsRemote + Send + Sync> LfsClient<'a, C> {
   pub fn new(repo: &'a git2::Repository, client: C) -> Self {
-    Self { repo, client, concurrency_limit: 1 }
+    Self { repo, client, on_progress: None, concurrency_limit: 1 }
   }
 
   pub fn concurrency_limit(self, concurrency_limit: usize) -> Self {
     Self { concurrency_limit, ..self }
+  }
+
+  pub fn on_progress(self, on_progress: Box<OnProgress<'a>>) -> Self {
+    Self { on_progress: Some(on_progress), ..self }
   }
 
   pub async fn pull(&self, pointers: &[Pointer]) -> Result<(), RemoteError> {
@@ -122,9 +147,13 @@ impl<'a, C: LfsRemote + Send + Sync> LfsClient<'a, C> {
 
     debug!(response = ?response, "download: got batch response");
     let total_objects = response.objects.len();
+    let total_bytes = response.objects.iter().map(|o| o.size).sum::<u64>() as usize;
 
-    let futures = response.objects.into_iter().enumerate().map(async |(index, object)| {
-      let n = index + 1;
+    let handled_bytes = AtomicUsize::new(0);
+    let handled_objects = AtomicUsize::new(0);
+
+    let futures = response.objects.into_iter().map(async |object| {
+      let n = handled_objects.fetch_add(1, Ordering::Relaxed) + 1;
       if let Some(error) = object.error {
         return Err(RemoteError::ObjectError(format!("{} - {}", error.code, error.message)));
       }
@@ -135,6 +164,18 @@ impl<'a, C: LfsRemote + Send + Sync> LfsClient<'a, C> {
       };
 
       let download_action = actions.download.ok_or(RemoteError::EmptyResponse)?;
+
+      if let Some(on_progress) = &self.on_progress {
+        let event = ProgressEvent {
+          total_objects,
+          total_bytes,
+          bytes_handled: handled_bytes.fetch_add(object.size as usize, Ordering::Relaxed),
+          objects_handled: n - 1,
+          next_object_size: object.size as usize,
+        };
+
+        on_progress(Progress::Download(event));
+      }
 
       let pointer = pointers.iter().find(|p| p.hex() == object.oid).ok_or(RemoteError::NotFound)?;
 
@@ -200,9 +241,14 @@ impl<'a, C: LfsRemote + Send + Sync> LfsClient<'a, C> {
     let retry_delay = Duration::from_millis(500);
 
     let total_objects = response.objects.len();
+    let total_bytes = response.objects.iter().map(|o| o.size).sum::<u64>() as usize;
+    let handled_bytes = AtomicUsize::new(0);
+    let handled_objects = AtomicUsize::new(0);
 
-    let futures = response.objects.iter().enumerate().map(async |(index, object)| {
-      let n = index + 1;
+    let futures = response.objects.into_iter().map(async |object| {
+      let n = handled_objects.fetch_add(1, Ordering::Relaxed) + 1;
+      let handled_bytes = handled_bytes.fetch_add(object.size as usize, Ordering::Relaxed);
+
       if let Some(error) = object.error.as_ref() {
         return Err(RemoteError::ObjectError(format!("{} - {}", error.code, error.message)));
       }
@@ -211,6 +257,18 @@ impl<'a, C: LfsRemote + Send + Sync> LfsClient<'a, C> {
         debug!( "upload ({}/{}): server didn't want us to do anything with '{}' (actions is None); skip", n, total_objects, object.oid);
         return Ok(());
       };
+
+      if let Some(on_progress) = &self.on_progress {
+        let event = ProgressEvent {
+          total_objects,
+          total_bytes,
+          bytes_handled: handled_bytes,
+          objects_handled: n - 1,
+          next_object_size: object.size as usize,
+        };
+
+        on_progress(Progress::Upload(event));
+      }
 
       let pointer = pointers.iter().find(|p| p.hex() == object.oid).ok_or(RemoteError::NotFound)?;
       let rel_object_path = pointer.path();
@@ -235,6 +293,19 @@ impl<'a, C: LfsRemote + Send + Sync> LfsClient<'a, C> {
       }
 
       if let Some(verify_action) = actions.verify.as_ref() {
+
+        if let Some(on_progress) = &self.on_progress {
+          let event = ProgressEvent {
+            total_objects,
+            total_bytes,
+            bytes_handled: handled_bytes,
+            objects_handled: n - 1,
+            next_object_size: object.size as usize,
+          };
+
+          on_progress(Progress::Verify(event));
+        }
+
         info!(path = %rel_object_path.display(), verify = %verify_action.href, "upload ({}/{}): verifying lfs object", n, total_objects);
         self.client.verify(&verify_action, pointer).await?;
       }

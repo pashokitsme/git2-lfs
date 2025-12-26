@@ -141,7 +141,6 @@ impl LfsRemote for ReqwestLfsClient {
     }
 
     req = req.header("User-Agent", USER_AGENT);
-
     req.body(blob.to_owned()).send().await.or_err(RemoteError::Upload).await?;
 
     Ok(())
