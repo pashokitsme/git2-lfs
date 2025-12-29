@@ -64,6 +64,8 @@ pub enum RemoteError {
 pub type Write = dyn std::io::Write + Send;
 pub type Read = dyn std::io::Read + Send;
 
+pub type OnProgress<'a> = dyn Fn(Progress) -> () + 'a;
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum Progress {
@@ -84,7 +86,37 @@ pub struct ProgressEvent {
   pub next_object_size: usize,
 }
 
-pub type OnProgress<'a> = dyn Fn(Progress) -> () + 'a;
+impl Progress {
+  pub fn total_objects(&self) -> usize {
+    match self {
+      Progress::Download(event) | Progress::Upload(event) | Progress::Verify(event) => event.total_objects,
+    }
+  }
+
+  pub fn total_bytes(&self) -> usize {
+    match self {
+      Progress::Download(event) | Progress::Upload(event) | Progress::Verify(event) => event.total_bytes,
+    }
+  }
+
+  pub fn bytes_handled(&self) -> usize {
+    match self {
+      Progress::Download(event) | Progress::Upload(event) | Progress::Verify(event) => event.bytes_handled,
+    }
+  }
+
+  pub fn objects_handled(&self) -> usize {
+    match self {
+      Progress::Download(event) | Progress::Upload(event) | Progress::Verify(event) => event.objects_handled,
+    }
+  }
+
+  pub fn next_object_size(&self) -> usize {
+    match self {
+      Progress::Download(event) | Progress::Upload(event) | Progress::Verify(event) => event.next_object_size,
+    }
+  }
+}
 
 #[async_trait]
 pub trait LfsRemote: Send + Sync {
