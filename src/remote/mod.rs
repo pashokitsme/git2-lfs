@@ -9,6 +9,8 @@ use crate::Pointer;
 use async_trait::async_trait;
 
 use futures::StreamExt;
+use serde::Deserialize;
+use serde::Serialize;
 use tracing::*;
 
 pub use dto::*;
@@ -62,12 +64,14 @@ pub enum RemoteError {
 pub type Write = dyn std::io::Write + Send;
 pub type Read = dyn std::io::Read + Send;
 
+#[derive(Serialize, Deserialize, Debug)]
 pub enum Progress {
   Download(ProgressEvent),
   Verify(ProgressEvent),
   Upload(ProgressEvent),
 }
 
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ProgressEvent {
   pub total_objects: usize,
   pub total_bytes: usize,

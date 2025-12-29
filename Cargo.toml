@@ -13,6 +13,7 @@ tracing = "0.1.41"
 url = "2.5.7"
 async-trait = "0.1"
 futures = { version = "0.3.31" }
+serde_derive = "1.0.228"
 
 reqwest = { optional = true, version = "0.12.24", features = [
   "json",
