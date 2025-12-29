@@ -104,8 +104,8 @@ impl<'a, C: LfsRemote + Send + Sync> LfsClient<'a, C> {
     Self { concurrency_limit, ..self }
   }
 
-  pub fn on_progress(self, on_progress: Box<OnProgress<'a>>) -> Self {
-    Self { on_progress: Some(on_progress), ..self }
+  pub fn on_progress(self, on_progress: Option<Box<OnProgress<'a>>>) -> Self {
+    Self { on_progress, ..self }
   }
 
   pub async fn pull(&self, pointers: &[Pointer]) -> Result<(), RemoteError> {

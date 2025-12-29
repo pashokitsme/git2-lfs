@@ -72,11 +72,11 @@ async fn lfs_pull_missing(sandbox: TempDir) -> Result<(), anyhow::Error> {
   let verify_hits = RefCell::new(0);
   let upload_hits = RefCell::new(0);
 
-  let lfs_remote = LfsClient::new(&repo, client).on_progress(Box::new(|progress| match progress {
+  let lfs_remote = LfsClient::new(&repo, client).on_progress(Some(Box::new(|progress| match progress {
     Progress::Download(_) => *download_hits.borrow_mut() += 1,
     Progress::Verify(_) => *verify_hits.borrow_mut() += 1,
     Progress::Upload(_) => *upload_hits.borrow_mut() += 1,
-  }));
+  })));
 
   lfs_remote.pull(&missing).await?;
 
