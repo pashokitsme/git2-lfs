@@ -197,7 +197,7 @@ impl<'a, C: LfsRemote + Send + Sync> LfsClient<'a, C> {
         let mut buf = BufWriter::new(File::options().create_new(true).write(true).open(&path)?);
 
         let local_path = path.strip_prefix(&object_dir).unwrap_or(&path);
-        info!(url = %download_action.href, size = %pointer.size(), attempt = %attempt, "download ({}/{}): downloading lfs object", n, total_objects);
+        info!(url = %download_action.href, size = %pointer.size(), attempt = %attempt, "download ({}/{})", n, total_objects);
         let download_result = self.client.download(&download_action, &mut buf).await;
         drop(buf);
 
@@ -284,7 +284,7 @@ impl<'a, C: LfsRemote + Send + Sync> LfsClient<'a, C> {
         let mut attempt = 0;
 
         while attempt < 3 {
-          debug!(url = %upload_action.href, size = %content.len(), attempt = %attempt, "uploading lfs object ({}/{})", n, total_objects);
+          debug!(url = %upload_action.href, size = %content.len(), attempt = %attempt, "upload ({}/{})", n, total_objects);
           match self.client.upload(&upload_action, &content).await {
             Ok(()) => break,
             Err(e) => {
